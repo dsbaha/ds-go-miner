@@ -67,7 +67,11 @@ func main() {
 	}
 
 	buff := make([]byte, 1024)
-	conn.Read(buff)
+	_, err = conn.Read(buff)
+	if err != nil {
+		fmt.Println("error", err)
+		os.Exit(1)
+	}
 
 	logger("Connected to Server")
 	logger(string(buff))
@@ -87,7 +91,12 @@ func main() {
 	for {
 		buff = make([]byte, 1024)
 		fmt.Fprintf(conn, fmt.Sprintf(jobStr, *name, *diff))
-		conn.Read(buff)
+		
+		_, err = conn.Read(buff)
+		if err != nil {
+			continue
+		}
+
 		logger(string(buff))
 
 		str := strings.Split(string(buff), ",")

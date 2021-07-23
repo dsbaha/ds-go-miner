@@ -79,7 +79,7 @@ func BenchmarkDUCOS1A2(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		job.Nonce += uint64(i)
-		ducos1a(job)
+		ducos1a2(job)
 	}
 }
 
