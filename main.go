@@ -79,58 +79,64 @@ func main() {
 	defer conn.Close()
 
 	for {
-		switch (*algo) {
-		case "ducos1a":
-			fmt.Fprintf(conn, s1ajob, *name, *diff)
-		case "xxhash":
-			fmt.Fprintf(conn, xxhjob, *name, *diff)
-		default:
-			logger("error in setting job type")
-			os.Exit(1)
-		}
-
-		buff = make([]byte, 1024)
-		_, err = conn.Read(buff)
-		if err != nil {
-			continue
-		}
-
-		logger(string(buff))
-
-		str := strings.Split(string(buff), ",")
-		if len(str) < 2 {
-			logger("len problem")
-			continue
-		}
-
-		str[2] = strings.TrimRight(str[2], "\x00")
-		str[2] = strings.TrimRight(str[2], "\n")
-		difficulty, err := strconv.ParseUint(str[2], 10, 64)
-		if err != nil {
-			fmt.Println("strconv error", err)
-			continue
-		}
-
-		job := Job{
+		job := &Job{
 			Algorithm: *algo,
-			NewBlock: str[0],
-			ExpectedBlock: str[1],
-			Difficulty: difficulty,
+		}
+
+		err = job.getJob(conn)
+		if err != nil {
+			logger("error with getjob ", err)
+			continue
 		}
 
 		err = job.ducoJob()
 		if err != nil {
-			logger(err)
+			logger("error with ducoJob ", err)
 			continue
 		}
 
 		err = job.reportJob(conn)
 		if err != nil {
-			logger(err)
+			logger("error with reportJob ", err)
 			continue
 		}
 
 	}
+}
+
+func (j *Job) getJob(conn net.Conn) (err error) {
+	switch (j.Algorithm) {
+		case "xxhash":
+			fmt.Fprintf(conn, xxhjob, *name, *diff)
+		default:
+			fmt.Fprintf(conn, s1ajob, *name, *diff)
+	}
+
+	buf := make([]byte, 1024)
+	_, err = conn.Read(buf)
+	if err != nil {
+		return
+	}
+
+	logger(string(buf))
+
+	str := strings.Split(string(buf), ",")
+	if len(str) < 2 {
+		return errors.New("str split error")
+	}
+
+	str[2] = strings.TrimRight(str[2], "\x00")
+	str[2] = strings.TrimRight(str[2], "\n")
+	difficulty, err := strconv.ParseUint(str[2], 10, 64)
+	if err != nil {
+		return
+	}
+
+	j.NewBlock = str[0]
+	j.ExpectedBlock = str[1]
+	j.Difficulty = difficulty
+
+	return
 }
 
 //Reports the Job Result
