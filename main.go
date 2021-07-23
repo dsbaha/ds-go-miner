@@ -90,8 +90,7 @@ func main() {
 
 	for {
 		buff = make([]byte, 1024)
-		jobreq := fmt.Sprintf(jobStr, *name, *diff)
-		fmt.Fprint(conn, jobreq)
+		fmt.Fprintf(conn, jobStr, *name, *diff)
 		
 		_, err = conn.Read(buff)
 		if err != nil {
