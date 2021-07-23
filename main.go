@@ -19,13 +19,13 @@ const ()
 var (
 	server = flag.String("server", os.Getenv("DUCOSERVER"), "Server Address and Port, environment variable DUCOSERVER")
 	name = flag.String("name", os.Getenv("MINERNAME"), "Miner Name, enviromnet variable MINERNAME")
-	ID = flag.String("id", os.Getenv("HOSTNAME"), "Rig ID, environment variable HOSTNAME")
+	id = flag.String("id", os.Getenv("HOSTNAME"), "Rig ID, environment variable HOSTNAME")
 	diff = flag.String("diff", os.Getenv("DIFF"), "Difficulty LOW/MEDIUM/NET, environment variable DIFF")
 	algo = flag.String("algo", os.Getenv("ALGO"), "Algorithm select xxhash/ducos1a, environment variable ALGO")
 	quiet = flag.Bool("quiet", false, "Turn off Console Logging")
 	jobStr string
-	MinerName = "ds-go-miner"
-	Version = "0.1"
+	minername = "ds-go-miner"
+	version = "0.1"
 )
 
 func init() {}
@@ -48,8 +48,8 @@ func setDefaults() {
 		*diff = "MEDIUM"
 	}
 
-	if (*ID == "") {
-		*ID = "SETID"
+	if (*id == "") {
+		*id = "SETID"
 	}
 }
 
@@ -130,9 +130,9 @@ func main() {
 func (j *Job) reportJob(conn net.Conn) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	rate := 0
-	version := fmt.Sprintf("%s %s", MinerName, Version)
+	ver := fmt.Sprintf("%s %s", minername, version)
 
-	rpt := fmt.Sprintf("%v,%v,%v,%v\n", nonce, rate, version, *ID)
+	rpt := fmt.Sprintf("%v,%v,%v,%v\n", nonce, rate, ver, *id)
 	_, err = fmt.Fprintf(conn, rpt)
 	if err != nil {
 		return
@@ -149,6 +149,7 @@ func (j *Job) reportJob(conn net.Conn) (err error) {
 	return
 }
 
+//Job is a struct for the job
 type Job struct {
 	Algorithm string
 	NewBlock string
