@@ -14,7 +14,10 @@ import (
 	"github.com/OneOfOne/xxhash"
 )
 
-const ()
+const (
+	s1ajob = "JOB,%s,%s\n"
+	xxhjob = "JOBXX,%s,%s\n"
+)
 
 var (
 	server = flag.String("server", os.Getenv("DUCOSERVER"), "Server Address and Port, environment variable DUCOSERVER")
@@ -23,7 +26,6 @@ var (
 	diff = flag.String("diff", os.Getenv("DIFF"), "Difficulty LOW/MEDIUM/NET, environment variable DIFF")
 	algo = flag.String("algo", os.Getenv("ALGO"), "Algorithm select xxhash/ducos1a, environment variable ALGO")
 	quiet = flag.Bool("quiet", false, "Turn off Console Logging")
-	jobStr string
 	minername = "ds-go-miner"
 	version = "0.1"
 )
@@ -78,20 +80,18 @@ func main() {
 
 	defer conn.Close()
 
-	switch (*algo) {
-	case "ducos1a":
-		jobStr = "JOB,%s,%s\n"
-	case "xxhash":
-		jobStr = "JOBXX,%s,%s\n"
-	default:
-		logger("error in setting job string")
-		os.Exit(1)
-	}
-
 	for {
+		switch (*algo) {
+		case "ducos1a":
+			fmt.Fprintf(conn, s1ajob, *name, *diff)
+		case "xxhash":
+			fmt.Fprintf(conn, xxhjob, *name, *diff)
+		default:
+			logger("error in setting job type")
+			os.Exit(1)
+		}
+
 		buff = make([]byte, 1024)
-		fmt.Fprintf(conn, jobStr, *name, *diff) //lint:ignore //false SA1006
-		
 		_, err = conn.Read(buff)
 		if err != nil {
 			continue
