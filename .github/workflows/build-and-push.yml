@@ -10,11 +10,7 @@ jobs:
       - name: Go Version
         run: go version
       - name: Install dependencies
-        run: |
-          go mod download
-          go get -u golang.org/x/lint/golint
-      - name: Go Lint
-        run: golint
+        run: go mod download
       - name: Go Vet
         run: go vet
       - name: Run Test
