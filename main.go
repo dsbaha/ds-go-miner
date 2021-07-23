@@ -59,8 +59,7 @@ func main() {
 	flag.Parse()
 	setDefaults()
 
-	logger("Connecting to Server")
-	logger(*server)
+	logger("Connecting to Server: ", *server, "\n")
 
 	conn, err := net.Dial("tcp", *server)
 	if err != nil {
@@ -75,8 +74,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger("Connected to Server")
-	logger(string(buff))
+	logger("Connected to Server Version: ", string(buff), "\n")
 
 	defer conn.Close()
 
@@ -201,15 +199,7 @@ func (j *Job) ducoJob() (err error) {
 	return
 }
 
-// About the same as the first for performance, less readable.
-func ducos1a3(j *Job) (err error) {
-	data := []byte(j.NewBlock + strconv.FormatUint(j.Nonce, 10) )
-	j.Result = fmt.Sprintf("%x", (sha1.Sum(data)))
-	return
-}
-
-// Benchmark differences, this one is slower.
-func ducos1a2(j *Job) (err error) {
+func ducos1a(j *Job) (err error) {
 	num := strconv.FormatUint(j.Nonce, 10)
 	data := []byte(j.NewBlock + num)
 	h := sha1.New()
@@ -218,8 +208,13 @@ func ducos1a2(j *Job) (err error) {
 	return
 }
 
-// About the same, but more readable.
-func ducos1a(j *Job) (err error) {
+func ducos1a2(j *Job) (err error) {
+	data := []byte(j.NewBlock + strconv.FormatUint(j.Nonce, 10) )
+	j.Result = fmt.Sprintf("%x", (sha1.Sum(data)))
+	return
+}
+
+func ducos1a3(j *Job) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	data := []byte(j.NewBlock + nonce)
 	sum := sha1.Sum(data)
@@ -243,10 +238,12 @@ func ducos1xxh(j *Job) (err error) {
 	return
 }
 
-func logger (msg interface{}) {
+func logger (msg ...interface{}) {
 	if *quiet {
 		return
 	}
 
-	fmt.Print(msg)
+	for _, v := range msg {
+		fmt.Print(v)
+	}
 }
