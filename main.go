@@ -17,11 +17,11 @@ import (
 const ()
 
 var (
-	server = flag.String("server", "149.91.88.18:6000", "Server Address and Port")
-	name = flag.String("name", "", "Miner Name")
-	ID = flag.String("id", os.Getenv("HOSTNAME"), "Rig ID")
-	diff = flag.String("diff", "MEDIUM", "Difficulty LOW/MEDIUM/NET")
-	algo = flag.String("algo", "ducos1a", "Algorithm select xxhash/ducos1a")
+	server = flag.String("server", os.Getenv("DUCOSERVER"), "Server Address and Port, environment variable DUCOSERVER")
+	name = flag.String("name", os.Getenv("MINERNAME"), "Miner Name, enviromnet variable MINERNAME")
+	ID = flag.String("id", os.Getenv("HOSTNAME"), "Rig ID, environment variable HOSTNAME")
+	diff = flag.String("diff", os.Getenv("DIFF"), "Difficulty LOW/MEDIUM/NET, environment variable DIFF")
+	algo = flag.String("algo", os.Getenv("ALGO"), "Algorithm select xxhash/ducos1a, environment variable ALGO")
 	quiet = flag.Bool("quiet", false, "Turn off Console Logging")
 	jobStr string
 	MinerName = "ds-go-miner"
@@ -30,13 +30,32 @@ var (
 
 func init() {}
 
-func main() {
-	flag.Parse()
-
-	if (*name == "" || *algo == "" || *diff == "" || *ID == "" || *server == "") {
+func setDefaults() {
+	if (*name == "") {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+
+	if (*server == "") {
+		*server = "149.91.88.18:6000"
+	}
+
+	if (*algo == "") {
+		*algo = "ducos1a"
+	}
+
+	if (*diff == "") {
+		*diff = "MEDIUM"
+	}
+
+	if (*ID == "") {
+		*ID = "SETID"
+	}
+}
+
+func main() {
+	flag.Parse()
+	setDefaults()
 
 	logger("Connecting to Server")
 	logger(*server)
@@ -47,10 +66,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	buff := make([]byte, 8)
+	buff := make([]byte, 1024)
 	conn.Read(buff)
 
-	fmt.Println("Connected to Server", string(buff))
+	logger("Connected to Server")
+	logger(string(buff))
 
 	defer conn.Close()
 
