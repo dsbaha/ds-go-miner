@@ -1,0 +1,20 @@
+name: build-and-push
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+      - name: Go Version
+        run: go version
+      - name: Install dependencies
+        run: go mod download
+      - name: Run Test
+        run: go test
+      - name: Run Bench Test
+        run: go test -bench=.
+      - name: Run Build
+        run: CGO_ENABLED=0 go build
+        
