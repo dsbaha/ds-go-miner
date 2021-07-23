@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	s1ajob = "JOB,%s,%s\n"
-	xxhjob = "JOBXX,%s,%s\n"
+	s1ajob = "JOB,%v,%v\n"
+	xxhjob = "JOBXX,%v,%v\n"
 )
 
 var (
@@ -139,10 +139,8 @@ func main() {
 func (j *Job) reportJob(conn net.Conn) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	rate := 0
-	ver := fmt.Sprintf("%s %s", minername, version)
 
-	rpt := fmt.Sprintf("%v,%v,%v,%v\n", nonce, rate, ver, *id)
-	_, err = fmt.Fprintf(conn, rpt)
+	_, err = fmt.Fprintf(conn, "%v,%v,%v %v,%v\n", nonce, rate, minername, version, *id)
 	if err != nil {
 		return
 	}
