@@ -17,6 +17,7 @@ import (
 const (
 	s1ajob = "JOB,%v,%v\n"
 	xxhjob = "JOBXX,%v,%v\n"
+	minername = "dgm"
 )
 
 var (
@@ -26,7 +27,6 @@ var (
 	diff = flag.String("diff", os.Getenv("DIFF"), "Difficulty LOW/MEDIUM/NET, environment variable DIFF")
 	algo = flag.String("algo", os.Getenv("ALGO"), "Algorithm select xxhash/ducos1a, environment variable ALGO")
 	quiet = flag.Bool("quiet", false, "Turn off Console Logging")
-	minername = "ds-go-miner"
 	version = "0.1"
 )
 
