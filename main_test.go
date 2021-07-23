@@ -118,7 +118,7 @@ func BenchmarkXXHash(b *testing.B) {
 	var err error
 	for i := 0 ; i < b.N ; i++ {
 		job.Nonce += uint64(i)
-		ducos1xxh(job)
+		err = ducos1xxh(job)
 		if err != nil {
 			b.Errorf("benchmark error %s", err)
 		}
