@@ -64,9 +64,13 @@ func BenchmarkDUCOS1A(b *testing.B) {
 		Difficulty: difficulty,
 	}
 
+	var err error
 	for i := 0; i < b.N; i++ {
 		job.Nonce += uint64(i)
-		ducos1a(job)
+		err = ducos1a(job)
+		if err != nil {
+			b.Errorf("benchmark error %s", err)
+		}
 	}
 }
 
@@ -77,9 +81,13 @@ func BenchmarkDUCOS1A2(b *testing.B) {
 		Difficulty: difficulty,
 	}
 
+	var err error
 	for i := 0; i < b.N; i++ {
 		job.Nonce += uint64(i)
-		ducos1a2(job)
+		err = ducos1a2(job)
+		if err != nil {
+			b.Errorf("benchmark error %s", err)
+		}
 	}
 }
 
@@ -90,9 +98,13 @@ func BenchmarkDUCOS1A3(b *testing.B) {
 		Difficulty: difficulty,
 	}
 
+	var err error
 	for i := 0; i < b.N; i++ {
 		job.Nonce += uint64(i)
-		ducos1a3(job)
+		err = ducos1a3(job)
+		if err != nil {
+			b.Errorf("benchmark error %s", err)
+		}
 	}
 }
 
@@ -103,8 +115,12 @@ func BenchmarkXXHash(b *testing.B) {
 		Difficulty: xxDiff,
 	}
 
+	var err error
 	for i := 0 ; i < b.N ; i++ {
 		job.Nonce += uint64(i)
 		ducos1xxh(job)
+		if err != nil {
+			b.Errorf("benchmark error %s", err)
+		}
 	}
 }
