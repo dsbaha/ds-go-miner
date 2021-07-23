@@ -90,7 +90,7 @@ func main() {
 
 	for {
 		buff = make([]byte, 1024)
-		fmt.Fprintf(conn, jobStr, *name, *diff)
+		fmt.Fprintf(conn, jobStr, *name, *diff) //lint:ignore //false SA1006
 		
 		_, err = conn.Read(buff)
 		if err != nil {
