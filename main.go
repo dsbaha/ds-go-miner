@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"flag"
+	"time"
 	"errors"
 	"strings"
 	"strconv"
@@ -15,10 +16,13 @@ import (
 )
 
 const (
-	s1ajob = "JOB,%v,%v\n"
-	xxhjob = "JOBXX,%v,%v\n"
+	s1ajob = "JOB,%v,%v"
+	xxhjob = "JOBXX,%v,%v"
 	minername = "dgm"
 	report = "%v,%v,%v %v,%v"
+	SEPERATOR = ","
+	NEWLINE = "\n"
+	NULL = "\x00"
 )
 
 var (
@@ -28,6 +32,7 @@ var (
 	diff = flag.String("diff", os.Getenv("DIFF"), "Difficulty LOW/MEDIUM/NET, environment variable DIFF")
 	algo = flag.String("algo", os.Getenv("ALGO"), "Algorithm select xxhash/ducos1a, environment variable ALGO")
 	quiet = flag.Bool("quiet", false, "Turn off Console Logging")
+	debug = flag.Bool("debug", false, "console log send/receive messages.")
 	skip = flag.Bool("skip", false, "Skip the first 'Difficulty' Hash Range")
 	version = "0.1"
 )
@@ -58,20 +63,19 @@ func setDefaults() {
 }
 
 func connect() (conn net.Conn, err error) {
-	logger("Connecting to Server: ", *server, "\n")
+	logger("Connecting to Server: ", *server, NEWLINE)
 
 	conn, err = net.Dial("tcp", *server)
 	if err != nil {
 		return
 	}
 
-	buf := make([]byte, 8)
-	_, err = conn.Read(buf)
+	resp, err := read(conn)
 	if err != nil {
 		return
 	}
 
-	logger("Connected to Server Version: ", string(buf), "\n")
+	logger("Connected to Server Version: ", resp, NEWLINE)
 
 	return
 }
@@ -79,6 +83,8 @@ func connect() (conn net.Conn, err error) {
 func main() {
 	flag.Parse()
 	setDefaults()
+
+	logger("Starting ds-go-miner version ", version, NEWLINE)
 
 	conn, err := connect()
 	if err != nil {
@@ -93,9 +99,8 @@ func main() {
 
 		err = job.getJob(conn)
 		if err != nil {
-			logger("error with getjob ", err)
+			loggerDebug("error with getjob ", err)
 			if err == io.EOF {
-				conn.Close()
 				conn, _ = connect()
 			}
 			continue
@@ -103,54 +108,61 @@ func main() {
 
 		err = job.ducoJob()
 		if err != nil {
-			logger("error with ducoJob ", err)
+			loggerDebug("error with ducoJob ", err)
 			continue
 		}
 
 		err = job.reportJob(conn)
 		if err != nil {
-			logger("error with reportJob ", err)
-			if err == io.EOF {
-				conn.Close()
-				conn, _ = connect()
-			}
+			loggerDebug("error with reportJob ", err)
 			continue
 		}
 	}
 }
 
 func (j *Job) getJob(conn net.Conn) (err error) {
+	var getjobrequest string
 	switch (j.Algorithm) {
 		case "xxhash":
-			fmt.Fprintf(conn, xxhjob, *name, *diff)
+			getjobrequest = fmt.Sprintf(xxhjob, *name, *diff)
 		default:
-			fmt.Fprintf(conn, s1ajob, *name, *diff)
+			getjobrequest = fmt.Sprintf(s1ajob, *name, *diff)
 	}
 
-	buf := make([]byte, 1024)
-	_, err = conn.Read(buf)
+	err = send(conn, getjobrequest)
 	if err != nil {
 		return
 	}
 
-	logger(string(buf))
+	resp, err := read(conn)
+	if err != nil {
+		return
+	}
 
-	str := strings.Split(string(buf), ",")
+	logger("Get Job Response ", resp)
+
+	str := strings.Split(resp, ",")
 	if len(str) < 2 {
 		return errors.New("str split error")
 	}
 
-	str[2] = strings.TrimRight(str[2], "\x00")
-	str[2] = strings.TrimRight(str[2], "\n")
-	difficulty, err := strconv.ParseUint(str[2], 10, 64)
+	diff, err := parseUint(str[2])
 	if err != nil {
 		return
 	}
 
 	j.NewBlock = str[0]
 	j.ExpectedBlock = str[1]
-	j.Difficulty = difficulty
+	j.Difficulty = diff
 
+	return
+}
+
+// parses a string input, cleans it, and returns a uint64
+func parseUint(str string) (ret uint64, err error) {
+	str = strings.TrimRight(str, NULL)
+	str = strings.TrimRight(str, NEWLINE)
+	ret, err = strconv.ParseUint(str, 10, 64)
 	return
 }
 
@@ -159,20 +171,18 @@ func (j *Job) reportJob(conn net.Conn) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	rate := 0
 	rpt := fmt.Sprintf(report, nonce, rate, minername, version, *id)
-	logger(rpt, " ")
 
-	_, err = fmt.Fprintln(conn, rpt)
+	err = send(conn, rpt)
 	if err != nil {
 		return
 	}
 
-	buf := make([]byte, 1024)
-	_, err = conn.Read(buf)
+	resp, err := read(conn)
 	if err != nil {
 		return
 	}
 
-	logger(string(buf))
+	logger("Submit Job Response: ", resp)
 
 	return
 }
@@ -223,7 +233,7 @@ func (j *Job) ducoJob() (err error) {
 		//Getting here means searching the space prior to skip
 		j.Difficulty = (j.Difficulty-1) / 100
 		j.Nonce = 0
-		logger("searching skipped space ", j.Nonce, " ", j.Difficulty, "\n")
+		loggerDebug("searching skipped space ", j.Nonce, " ", j.Difficulty, NEWLINE)
 		err = j.jobLoop()
 	}
 
@@ -277,12 +287,47 @@ func ducos1xxh(j *Job) (err error) {
 	return
 }
 
-func logger (msg ...interface{}) {
-	if *quiet {
+// logger is the general purpose logger
+// which can be turned off w/ cmd line switch
+func logger(msg ...interface{}) {
+	if (*quiet) {
 		return
 	}
+
+	tm := time.Now().Format(time.RFC3339)
+	fmt.Printf("[%s] ", tm)
 
 	for _, v := range msg {
 		fmt.Print(v)
 	}
+}
+
+func loggerDebug(msg ...interface{}) {
+	if (!*debug) {
+		return
+	}
+
+	logger(msg...)
+}
+
+// read is a helper for reciving a string
+func read(conn net.Conn) (ret string, err error) {
+	buf := make([]byte, 128)
+	_, err = conn.Read(buf)
+
+	if err != nil {
+		return
+	}
+
+	ret = string(buf)
+
+	loggerDebug("read ", ret)
+	return
+}
+
+// send is a helper for sending a string
+func send(conn net.Conn, str string) (err error) {
+	fmt.Fprintln(conn, str)
+	loggerDebug("send ", str, NEWLINE)
+	return
 }
