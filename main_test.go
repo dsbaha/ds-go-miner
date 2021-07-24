@@ -91,23 +91,6 @@ func BenchmarkDUCOS1A2(b *testing.B) {
 	}
 }
 
-func BenchmarkDUCOS1A3(b *testing.B) {
-	job := &Job{
-		NewBlock: lastblock,
-		ExpectedBlock: newblock,
-		Difficulty: difficulty,
-	}
-
-	var err error
-	for i := 0; i < b.N; i++ {
-		job.Nonce += uint64(i)
-		err = ducos1a3(job)
-		if err != nil {
-			b.Errorf("benchmark error %s", err)
-		}
-	}
-}
-
 func BenchmarkXXHash(b *testing.B) {
 	job := &Job{
 		NewBlock: xxLast,

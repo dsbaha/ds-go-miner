@@ -18,6 +18,7 @@ const (
 	s1ajob = "JOB,%v,%v\n"
 	xxhjob = "JOBXX,%v,%v\n"
 	minername = "dgm"
+	report = "%v,%v,%v %v,%v"
 )
 
 var (
@@ -27,6 +28,7 @@ var (
 	diff = flag.String("diff", os.Getenv("DIFF"), "Difficulty LOW/MEDIUM/NET, environment variable DIFF")
 	algo = flag.String("algo", os.Getenv("ALGO"), "Algorithm select xxhash/ducos1a, environment variable ALGO")
 	quiet = flag.Bool("quiet", false, "Turn off Console Logging")
+	skip = flag.Bool("skip", false, "Skip the first 'Difficulty' Hash Range")
 	version = "0.1"
 )
 
@@ -55,28 +57,34 @@ func setDefaults() {
 	}
 }
 
+func connect() (conn net.Conn, err error) {
+	logger("Connecting to Server: ", *server, "\n")
+
+	conn, err = net.Dial("tcp", *server)
+	if err != nil {
+		return
+	}
+
+	buf := make([]byte, 8)
+	_, err = conn.Read(buf)
+	if err != nil {
+		return
+	}
+
+	logger("Connected to Server Version: ", string(buf), "\n")
+
+	return
+}
+
 func main() {
 	flag.Parse()
 	setDefaults()
 
-	logger("Connecting to Server: ", *server, "\n")
-
-	conn, err := net.Dial("tcp", *server)
+	conn, err := connect()
 	if err != nil {
 		fmt.Println("error", err)
 		os.Exit(1)
 	}
-
-	buff := make([]byte, 1024)
-	_, err = conn.Read(buff)
-	if err != nil {
-		fmt.Println("error", err)
-		os.Exit(1)
-	}
-
-	logger("Connected to Server Version: ", string(buff), "\n")
-
-	defer conn.Close()
 
 	for {
 		job := &Job{
@@ -86,6 +94,10 @@ func main() {
 		err = job.getJob(conn)
 		if err != nil {
 			logger("error with getjob ", err)
+			if err == io.EOF {
+				conn.Close()
+				conn, _ = connect()
+			}
 			continue
 		}
 
@@ -98,10 +110,15 @@ func main() {
 		err = job.reportJob(conn)
 		if err != nil {
 			logger("error with reportJob ", err)
+			if err == io.EOF {
+				conn.Close()
+				conn, _ = connect()
+			}
 			continue
 		}
-
 	}
+
+	conn.Close()
 }
 
 func (j *Job) getJob(conn net.Conn) (err error) {
@@ -143,8 +160,10 @@ func (j *Job) getJob(conn net.Conn) (err error) {
 func (j *Job) reportJob(conn net.Conn) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	rate := 0
+	rpt := fmt.Sprintf(report, nonce, rate, minername, version, *id)
+	logger(rpt, " ")
 
-	_, err = fmt.Fprintf(conn, "%v,%v,%v %v,%v\n", nonce, rate, minername, version, *id)
+	_, err = fmt.Fprintln(conn, rpt)
 	if err != nil {
 		return
 	}
@@ -163,6 +182,7 @@ func (j *Job) reportJob(conn net.Conn) (err error) {
 //Job is a struct for the job
 type Job struct {
 	Algorithm string
+	AlgoFunc func(*Job) error
 	NewBlock string
 	ExpectedBlock string
 	Result string
@@ -174,40 +194,61 @@ type Job struct {
 
 func (j *Job) ducoJob() (err error) {
 	//Set the difficulty
+	if (*skip) {
+		j.Nonce = j.Difficulty
+	}
+
 	j.Difficulty = j.Difficulty * 100 + 1
 
 	//Set the algo function
-	var f func(*Job) error
+	//var f func(*Job) error
 	switch j.Algorithm {
 		case "xxhash":
-			f = func(j *Job) (err error) {
+			j.AlgoFunc = func(j *Job) (err error) {
 				return ducos1xxh(j)
 			}
 		case "ducos1a":
-			f = func(j *Job) (err error) {
+			j.AlgoFunc = func(j *Job) (err error) {
 				return ducos1a(j)
 			}
 		default:
 			return errors.New("unimplemented algo")
 	}
 
-	//Main job
-	for j.Nonce = 0; j.Nonce < j.Difficulty; j.Nonce++ {
+	//Main job Loop
+	err = j.jobLoop()
+	if err != nil {
+		return
+	}
 
-		err = f(j)
-
-		if (err != nil || j.Result == j.ExpectedBlock) {
-			//j.Nonce should be the answer.
-			break;
-		}
+	if (*skip && j.Nonce >= j.Difficulty) {
+		//Getting here means searching the space prior to skip
+		j.Difficulty = (j.Difficulty-1) / 100
+		j.Nonce = 0
+		logger("searching skipped space ", j.Nonce, " ", j.Difficulty, "\n")
+		err = j.jobLoop()
 	}
 
 	return
 }
 
+func (j *Job) jobLoop() (err error) {
+	if j.AlgoFunc == nil {
+		return errors.New("algo func nil")
+	}
+
+	for ; j.Nonce < j.Difficulty; j.Nonce++ {
+		err = j.AlgoFunc(j)
+		if (err != nil || j.Result == j.ExpectedBlock) {
+			break
+		}
+	}
+	return
+}
+
 func ducos1a(j *Job) (err error) {
-	num := strconv.FormatUint(j.Nonce, 10)
-	data := []byte(j.NewBlock + num)
+	nonce := strconv.FormatUint(j.Nonce, 10)
+	data := []byte(j.NewBlock + nonce)
 	h := sha1.New()
 	h.Write(data)
 	j.Result = hex.EncodeToString(h.Sum(nil))
@@ -215,12 +256,6 @@ func ducos1a(j *Job) (err error) {
 }
 
 func ducos1a2(j *Job) (err error) {
-	data := []byte(j.NewBlock + strconv.FormatUint(j.Nonce, 10) )
-	j.Result = fmt.Sprintf("%x", (sha1.Sum(data)))
-	return
-}
-
-func ducos1a3(j *Job) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	data := []byte(j.NewBlock + nonce)
 	sum := sha1.Sum(data)
