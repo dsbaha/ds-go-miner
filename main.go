@@ -141,7 +141,7 @@ func (j *Job) getJob(conn net.Conn) (err error) {
 
 	logger("Get Job Response ", resp)
 
-	str := strings.Split(resp, ",")
+	str := strings.Split(resp, SEPERATOR)
 	if len(str) < 2 {
 		return errors.New("str split error")
 	}
