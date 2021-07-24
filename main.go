@@ -117,8 +117,6 @@ func main() {
 			continue
 		}
 	}
-
-	conn.Close()
 }
 
 func (j *Job) getJob(conn net.Conn) (err error) {
