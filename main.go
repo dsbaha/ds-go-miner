@@ -129,7 +129,7 @@ func workLoop(TID int, wg *sync.WaitGroup) {
 				conn = nil
 			}
 
-			conn, err = connect(TID)
+			conn, _ = connect(TID)
 			continue
 		}
 
