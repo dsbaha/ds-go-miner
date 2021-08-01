@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,7 +36,8 @@ var (
 	quiet   = flag.Bool("quiet", false, "Turn off Console Logging")
 	debug   = flag.Bool("debug", false, "console log send/receive messages.")
 	skip    = flag.Bool("skip", false, "Skip the first 'Difficulty' Hash Range")
-	version = "0.1"
+	threads = flag.Int("threads", 1, "Number of Threads to Run")
+	version = "0.2"
 )
 
 func init() {}
@@ -61,22 +63,26 @@ func setDefaults() {
 	if *id == "" {
 		*id = "SETID"
 	}
+
+	if *threads <= 0 {
+		*threads = 1
+	}
 }
 
-func connect() (conn net.Conn, err error) {
-	logger("Connecting to Server: ", *server)
+func connect(TID int) (conn net.Conn, err error) {
+	logger(fmtID(TID), "Connecting to Server: ", *server)
 
 	conn, err = net.Dial("tcp", *server)
 	if err != nil {
 		return
 	}
 
-	resp, err := read(conn)
+	resp, err := read(conn, TID)
 	if err != nil {
 		return
 	}
 
-	logger("Connected to Server Version: ", resp)
+	logger(fmtID(TID), "Connected to Server Version: ", resp)
 
 	return
 }
@@ -87,35 +93,55 @@ func main() {
 
 	logger("Starting ds-go-miner version ", version)
 
-	conn, err := connect()
+	var wg sync.WaitGroup
+
+	for i := 0; i < *threads; i++ {
+		wg.Add(1)
+		go workLoop(i, &wg)
+	}
+
+	wg.Wait()
+}
+
+func workLoop(TID int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	conn, err := connect(TID)
 	if err != nil {
 		fmt.Println("error", err)
-		os.Exit(1)
+		return
 	}
 
 	for {
 		job := &Job{
 			Algorithm: *algo,
+			TID:       TID,
 		}
 
 		err = job.getJob(conn)
 		if err != nil {
-			loggerDebug("error with getjob ", err)
-			if err == io.EOF {
-				conn, _ = connect()
+			loggerDebug(fmtID(TID), "error with getjob ", err)
+			if err != io.EOF {
+				conn.Close()
 			}
+
+			if conn != nil {
+				conn = nil
+			}
+
+			conn, err = connect(TID)
 			continue
 		}
 
 		err = job.ducoJob()
 		if err != nil {
-			loggerDebug("error with ducoJob ", err)
+			loggerDebug(fmtID(TID), "error with ducoJob ", err)
 			continue
 		}
 
 		err = job.reportJob(conn)
 		if err != nil {
-			loggerDebug("error with reportJob ", err)
+			loggerDebug(fmtID(TID), "error with reportJob ", err)
 			continue
 		}
 	}
@@ -130,17 +156,17 @@ func (j *Job) getJob(conn net.Conn) (err error) {
 		getjobrequest = fmt.Sprintf(s1ajob, *name, *diff)
 	}
 
-	err = send(conn, getjobrequest)
+	err = send(conn, getjobrequest, j.TID)
 	if err != nil {
 		return
 	}
 
-	resp, err := read(conn)
+	resp, err := read(conn, j.TID)
 	if err != nil {
 		return
 	}
 
-	logger("Get Job Response ", resp)
+	logger(fmtID(j.TID), "Get Job Response ", resp)
 
 	str := strings.Split(resp, SEPERATOR)
 	if len(str) < 2 {
@@ -168,19 +194,20 @@ func parseUint(str string) (uint64, error) {
 func (j *Job) reportJob(conn net.Conn) (err error) {
 	nonce := strconv.FormatUint(j.Nonce, 10)
 	rate := 0
-	rpt := fmt.Sprintf(report, nonce, rate, minername, version, *id)
+	ID := fmt.Sprintf("%vx%v", j.TID, *id)
+	rpt := fmt.Sprintf(report, nonce, rate, minername, version, ID)
 
-	err = send(conn, rpt)
+	err = send(conn, rpt, j.TID)
 	if err != nil {
 		return
 	}
 
-	resp, err := read(conn)
+	resp, err := read(conn, j.TID)
 	if err != nil {
 		return
 	}
 
-	logger("Submit Job Response: ", resp)
+	logger(fmtID(j.TID), "Submit Job Response: ", resp)
 
 	return
 }
@@ -196,6 +223,7 @@ type Job struct {
 	Efficency     float32
 	Nonce         uint64
 	Sum64         uint64
+	TID           int
 }
 
 func (j *Job) ducoJob() (err error) {
@@ -231,7 +259,7 @@ func (j *Job) ducoJob() (err error) {
 		//Getting here means searching the space prior to skip
 		j.Difficulty = (j.Difficulty - 1) / 100
 		j.Nonce = 0
-		loggerDebug("searching skipped space ", j.Nonce, " ", j.Difficulty)
+		loggerDebug(fmtID(j.TID), "searching skipped space ", j.Nonce, " ", j.Difficulty)
 		err = j.jobLoop()
 	}
 
@@ -321,7 +349,7 @@ func cleanString(str string) (ret string) {
 }
 
 // read is a helper for reciving a string
-func read(conn net.Conn) (ret string, err error) {
+func read(conn net.Conn, TID int) (ret string, err error) {
 	buf := make([]byte, BUF_SIZE)
 	n, err := conn.Read(buf)
 
@@ -331,13 +359,18 @@ func read(conn net.Conn) (ret string, err error) {
 	}
 
 	ret = cleanString(string(buf))
-	loggerDebug("read ", n, " bytes ", ret)
+	loggerDebug(fmtID(TID), "read ", n, " bytes ", ret)
 	return
 }
 
 // send is a helper for sending a string
-func send(conn net.Conn, str string) (err error) {
+func send(conn net.Conn, str string, TID int) (err error) {
 	n, err := fmt.Fprintln(conn, str)
-	loggerDebug("send ", n, " bytes ", str)
+	loggerDebug(fmtID(TID), "send ", n, " bytes ", str)
 	return
+}
+
+// Quick Helper Function to Format Thread ID Logging
+func fmtID(id int) string {
+	return fmt.Sprintf("[Thread %v] ", id)
 }
